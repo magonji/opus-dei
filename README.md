@@ -50,7 +50,7 @@ python opus_dei.py
 Simply run the script and follow the interactive prompts:
 
 ```bash
-python opus_converter.py
+python opus_dei.py
 ```
 
 The program will guide you through three main steps:
@@ -104,7 +104,7 @@ The program parses Bruker OPUS binary files by:
 ### Project Structure
 ```
 opus-converter/
-├── opus_converter.py          # Main application
+├── opus_dei.py          # Main application
 ├── requirements.txt           # Python dependencies
 ├── README.md                 # This file
 └── examples/                 # Example files and usage
