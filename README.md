@@ -150,11 +150,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you use this software in your research, please consider citing:
 
 ```bibtex
-@software{opus_converter_2025,
+@software{opus_dei_2025,
   author = {González-Jiménez, Mario},
-  title = {OPUS Converter: A tool for converting Bruker OPUS spectral files},
-  url = {https://github.com/magonji/opus-converter},
-  version = {2.0},
+  title = {OPUS dei: A tool for converting Bruker OPUS spectral files},
+  url = {https://github.com/magonji/opus-dei},
+  version = {3.0},
   year = {2025},
   institution = {University of Glasgow}
 }
