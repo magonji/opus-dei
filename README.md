@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/magonji/opus-converter/issues)
 
-**OPUS dei v2.0** — A powerful command-line tool for converting Bruker OPUS spectral files to accessible formats.
+**OPUS dei v3.0** — A powerful command-line tool for converting Bruker OPUS spectral files to accessible formats.
 
 ## 🎯 Overview
 
@@ -32,7 +32,7 @@ cd opus-converter
 pip install -r requirements.txt
 
 # Run the converter
-python opus_converter.py
+python opus_dei.py
 ```
 
 ### Requirements
