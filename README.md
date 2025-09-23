@@ -25,7 +25,7 @@ OPUS Converter is designed to efficiently process Bruker OPUS binary files and c
 
 ```bash
 # Clone the repository
-git clone https://github.com/magonji/opus-dei.git
+git clone https://github.com/magonji/opus_dei.git
 cd opus-converter
 
 # Install dependencies
