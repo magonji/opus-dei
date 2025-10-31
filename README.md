@@ -2,7 +2,7 @@
 
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/magonji/opus-converter/issues)
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/magonji/opus_dei/issues)
 
 **OPUS dei v3.0** — A powerful command-line tool for converting Bruker OPUS spectral files to accessible formats.
 
@@ -26,7 +26,7 @@ OPUS Converter is designed to efficiently process Bruker OPUS binary files and c
 ```bash
 # Clone the repository
 git clone https://github.com/magonji/opus_dei.git
-cd opus-converter
+cd opus_dei
 
 # Install dependencies
 pip install -r requirements.txt
@@ -56,9 +56,11 @@ python opus_dei.py
 The program will guide you through three main steps:
 
 ### 1. Directory Selection 📁
+
 Browse and select the folder containing your OPUS files. The program recursively searches through all subdirectories to find files with numerical extensions (e.g., `spectrum.0`, `data.1`, `sample.15`).
 
 ### 2. Format Selection 🎯
+
 Choose your preferred output format(s):
 
 - **📊 Both .dpt and .mzz files** — Complete conversion with both formats
@@ -73,12 +75,14 @@ The tool automatically adapts its interface based on your dataset size:
 ## 📄 Output Formats
 
 ### .dpt Files (Data Point Table)
+
 - **Format**: Tab-delimited text file
 - **Content**: Full resolution wavenumber and absorption data
 - **Use case**: Direct import into analysis software (Origin, MATLAB, Python, R)
 - **File size**: Larger, but preserves all spectral information
 
 ### .mzz Files (Compressed Spectral Archive)
+
 - **Format**: ZIP-compressed custom format
 - **Content**: Rounded wavenumbers (1 cm⁻¹ resolution) with intensity data
 - **Use case**: Long-term storage, large dataset management
@@ -87,13 +91,16 @@ The tool automatically adapts its interface based on your dataset size:
 ## 🧪 Technical Details
 
 ### OPUS File Structure
+
 The program parses Bruker OPUS binary files by:
+
 - Reading the file header to locate data blocks
 - Extracting absorption spectra and metadata
 - Processing wavenumber ranges and spectral parameters
 - Handling various block types (sample, reference, parameters, etc.)
 
 ### Performance Optimisation
+
 - **Memory efficient**: Processes files individually to handle large datasets
 - **Error handling**: Robust error management with detailed reporting
 - **Cross-platform**: Works on Windows, macOS, and Linux
@@ -102,8 +109,9 @@ The program parses Bruker OPUS binary files by:
 ## 🔧 Development
 
 ### Project Structure
+
 ```
-opus-converter/
+opus_dei/
 ├── opus_dei.py          # Main application
 ├── requirements.txt           # Python dependencies
 ├── README.md                 # This file
@@ -123,6 +131,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 ## 📊 Use Cases
 
 Perfect for:
+
 - **Laboratory data archival** — Converting proprietary formats for long-term storage
 - **Spectral database preparation** — Preparing datasets for machine learning or statistical analysis
 - **Format migration** — Moving from OPUS to open formats for better accessibility
@@ -137,7 +146,7 @@ Perfect for:
 
 ## 📞 Support
 
-- **Issues**: Please report bugs or request features via [GitHub Issues](https://github.com/magonji/opus-converter/issues)
+- **Issues**: Please report bugs or request features via [GitHub Issues](https://github.com/magonji/opus_dei/issues)
 - **Email**: [mario.gonzalezjimenez@glasgow.ac.uk](mailto:mario.gonzalez-jimenez@glasgow.ac.uk)
 - **Institution**: University of Glasgow
 
@@ -168,6 +177,6 @@ If you use this software in your research, please consider citing:
 
 ---
 
-**Made with ❤️ for the spectroscopy community**
+**Made with lots of ❤️ for the spectroscopy community/Bruker sufferers**
 
 *Transform your OPUS files with style* ✨
