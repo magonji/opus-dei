@@ -2,7 +2,7 @@
 
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/magonji/opus_dei/issues)
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/magonji/opus-dei/issues)
 
 **OPUS dei v3.0** — A powerful command-line tool for converting Bruker OPUS spectral files to accessible formats.
 
@@ -25,14 +25,14 @@ OPUS Converter is designed to efficiently process Bruker OPUS binary files and c
 
 ```bash
 # Clone the repository
-git clone https://github.com/magonji/opus_dei.git
-cd opus_dei
+git clone https://github.com/magonji/opus-dei.git
+cd opus-dei
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Run the converter
-python opus_dei.py
+python opus-dei.py
 ```
 
 ### Requirements
@@ -50,7 +50,7 @@ python opus_dei.py
 Simply run the script and follow the interactive prompts:
 
 ```bash
-python opus_dei.py
+python opus-dei.py
 ```
 
 The program will guide you through three main steps:
@@ -68,7 +68,9 @@ Choose your preferred output format(s):
 - **🗜️ Only .mzz files** — Space-efficient compressed format (1 cm⁻¹ resolution)
 
 ### 3. Batch Processing ⚡
+
 The tool automatically adapts its interface based on your dataset size:
+
 - **Small batches (≤100 files)**: Individual file progress tracking
 - **Large batches (>100 files)**: Progress bar with ETA and statistics
 
@@ -110,9 +112,9 @@ The program parses Bruker OPUS binary files by:
 
 ### Project Structure
 
-```
-opus_dei/
-├── opus_dei.py          # Main application
+``` bash
+opus-dei/
+├── opus-dei.py          # Main application
 ├── requirements.txt           # Python dependencies
 ├── README.md                 # This file
 └── examples/                 # Example files and usage
@@ -146,7 +148,7 @@ Perfect for:
 
 ## 📞 Support
 
-- **Issues**: Please report bugs or request features via [GitHub Issues](https://github.com/magonji/opus_dei/issues)
+- **Issues**: Please report bugs or request features via [GitHub Issues](https://github.com/magonji/opus-dei/issues)
 - **Email**: [mario.gonzalezjimenez@glasgow.ac.uk](mailto:mario.gonzalez-jimenez@glasgow.ac.uk)
 - **Institution**: University of Glasgow
 
@@ -159,7 +161,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you use this software in your research, please consider citing:
 
 ```bibtex
-@software{opus_dei_2025,
+@software{opus-dei_2025,
   author = {González-Jiménez, Mario},
   title = {OPUS dei: A tool for converting Bruker OPUS spectral files},
   url = {https://github.com/magonji/opus-dei},
