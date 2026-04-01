@@ -430,7 +430,6 @@ def find_opus_files(directory_path):
     
     return opus_files
 
-
 def convert_opus_file(opus_filepath, output_formats, show_individual_files=False):
     """
     Convert a single OPUS file to the specified formats.
@@ -441,7 +440,7 @@ def convert_opus_file(opus_filepath, output_formats, show_individual_files=False
         show_individual_files (bool): Whether to show individual file processing messages
         
     Returns:
-        bool: True if conversion was successful, False otherwise
+        tuple: (True, None) on success; (False, error_message) on failure
     """
     try:
         if show_individual_files:
@@ -454,15 +453,18 @@ def convert_opus_file(opus_filepath, output_formats, show_individual_files=False
         # Extract absorption spectrum data
         absorption_spectrum = opus_reader["AB"]
 
-        # Extract wavenumber range parameters
+        # Extract wavenumber range parameters - old
+        # first_wavenumber = opus_reader["AB Data Parameter"]["FXV"]
+        # last_wavenumber = opus_reader["AB Data Parameter"]["LXV"]
+        # wavenumber_step = -(first_wavenumber - last_wavenumber) / len(absorption_spectrum)
+        # wavenumbers = np.arange(first_wavenumber, last_wavenumber, wavenumber_step)
+        # full_spectrum = np.column_stack((wavenumbers, absorption_spectrum))
+
+        # Extract wavenumber range parameters - new - 
         first_wavenumber = opus_reader["AB Data Parameter"]["FXV"]
         last_wavenumber = opus_reader["AB Data Parameter"]["LXV"]
-        wavenumber_step = -(first_wavenumber - last_wavenumber) / len(absorption_spectrum)
-
-        # Create the wavenumber axis
-        wavenumbers = np.arange(first_wavenumber, last_wavenumber, wavenumber_step)
-
-        # Create the full spectrum array (wavenumber, absorption)
+        wavenumber_step = (last_wavenumber - first_wavenumber) / (len(absorption_spectrum) -1)
+        wavenumbers = first_wavenumber + np.arange(len(absorption_spectrum)) * wavenumber_step
         full_spectrum = np.column_stack((wavenumbers, absorption_spectrum))
 
         # Save the full spectrum to a .dpt file if requested
@@ -506,12 +508,15 @@ def convert_opus_file(opus_filepath, output_formats, show_individual_files=False
             if show_individual_files:
                 print(f"  {Fore.GREEN}✓{Style.RESET_ALL} Created .mzz file")
         
-        return True
+        return True, None
 
     except Exception as error:
+        # if true, print error on screen
         if show_individual_files:
             print(f"  {Fore.RED}✗ Error:{Style.RESET_ALL} {error}")
-        return False
+
+        # error as string so it can be logged
+        return False, str(error)
 
 
 def welcome_message():
@@ -727,7 +732,8 @@ def main():
     successful_conversions = 0
     failed_conversions = 0
     start_time = time.time()
-    
+    error_log = []  # will hold dicts: {'file': path, 'error': message}
+
     for i, opus_file in enumerate(opus_files):
         if not show_individual:
             # Show progress bar for large batches
@@ -735,18 +741,50 @@ def main():
         else:
             # Show individual file processing for small batches
             print(f"{Fore.WHITE}[{i+1}/{len(opus_files)}]{Style.RESET_ALL}", end=" ")
-            
-        if convert_opus_file(opus_file, output_format_choice, show_individual_files=show_individual):
+        success, error_message = convert_opus_file(opus_file, output_format_choice, show_individual_files=show_individual)
+
+        if success:
             successful_conversions += 1
         else:
             failed_conversions += 1
-    
+            error_log.append({
+                'file': opus_file,
+                'error': error_message
+            })
     # Final progress bar update
     if not show_individual:
         print_progress_bar(len(opus_files), len(opus_files), start_time=start_time)
     
     total_time = time.time() - start_time
     print_summary(successful_conversions, failed_conversions, output_format_choice, total_time)
+
+    # Write errors to errors.txt if any
+    if error_log:
+        error_file_path = Path(folder_path) / "errors.txt"
+
+        # Write the errors.txt file.
+        try:
+            with open(error_file_path, 'w', encoding='utf-8') as ef:
+                ef.write("Hi there :)) \n")
+
+                for idx, rec in enumerate(error_log):
+                    # path to problematic file
+                    ef.write(rec['file'] + "\n")
+                    # error message
+                    ef.write("ERROR MESSAGE: \n")
+                    ef.write(rec['error'] + "\n")
+
+                    # blank line between entries
+                    if idx < len(error_log) - 1:
+                        ef.write("\n")
+
+            print(f"{Fore.RED}⚠ A list of failed files and error messages was written to:{Style.RESET_ALL} {error_file_path}")
+        except Exception as e:
+            # if it doesn't work, let me know
+            print(f"{Fore.RED}✗ Failed to write errors.txt: {e}{Style.RESET_ALL}")
+    else:
+        print(f"{Fore.GREEN}🎉 No errors encountered — errors.txt not created.{Style.RESET_ALL}")
+
 
 
 if __name__ == "__main__":
