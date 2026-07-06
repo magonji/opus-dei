@@ -515,10 +515,15 @@ def convert_opus_file(opus_filepath, output_formats, show_individual_files=False
         # Extract wavenumber range parameters
         first_wavenumber = opus_reader["AB Data Parameter"]["FXV"]
         last_wavenumber = opus_reader["AB Data Parameter"]["LXV"]
-        wavenumber_step = -(first_wavenumber - last_wavenumber) / len(absorption_spectrum)
 
-        # Create the wavenumber axis
-        wavenumbers = np.arange(first_wavenumber, last_wavenumber, wavenumber_step)
+        # Build the wavenumber axis with linspace: exactly one point per data
+        # value and exact endpoints. (The previous np.arange with a float step
+        # drifted at the last point and, for ~1 in 4 files, produced one extra
+        # point — which then made column_stack fail, silently dropping those
+        # files from the conversion.)
+        wavenumbers = np.linspace(
+            first_wavenumber, last_wavenumber, len(absorption_spectrum)
+        )
 
         # Create the full spectrum array (wavenumber, absorption)
         full_spectrum = np.column_stack((wavenumbers, absorption_spectrum))
@@ -896,7 +901,7 @@ class OpusDeiApp:
         return [
             (f"fg:{GOLD}", "Bruker OPUS spectral converter"),
             (f"fg:{DIM}", "   ·   "),
-            (f"fg:{GOLD}", "v3.1"),
+            (f"fg:{GOLD}", "v4.0"),
             (f"fg:{DIM}", "   ·   Mario González-Jiménez · University of Glasgow"),
         ]
 

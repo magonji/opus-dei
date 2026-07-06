@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/magonji/opus-dei/issues)
 
-**OPUS dei v3.0** — A powerful command-line tool for converting Bruker OPUS spectral files to accessible formats.
+**OPUS dei v4.0** — A powerful command-line tool for converting Bruker OPUS spectral files to accessible formats.
 
 ## 🎯 Overview
 
@@ -177,7 +177,7 @@ If you use this software in your research, please consider citing:
   author = {González-Jiménez, Mario},
   title = {OPUS dei: A tool for converting Bruker OPUS spectral files},
   url = {https://github.com/magonji/opus-dei},
-  version = {3.0},
+  version = {4.0},
   year = {2025},
   institution = {University of Glasgow}
 }
