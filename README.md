@@ -15,9 +15,10 @@ OPUS Converter is designed to efficiently process Bruker OPUS binary files and c
 - 📁 **Recursive File Discovery** — Automatically finds OPUS files in all subdirectories
 - ⚡ **Smart Batch Processing** — Adaptive interface that scales from small to massive datasets
 - 🎯 **Flexible Output Formats** — Choose exactly the formats you need
+- 🔎 **Metadata Inspector** — Read all the metadata stored in a single OPUS file on screen (grouped by block, with readable descriptions of common parameter codes) and optionally save it to a `.txt`
 - 📊 **Real-time Progress Tracking** — ETA calculations and processing statistics
 - 🛡️ **Error Resilience** — Continues processing even when individual files fail
-- 🎨 **Full-screen TUI** — A smooth, retro terminal interface with a giant ASCII banner, arrow-key navigation and an in-place progress view (no scrolling)
+- 🎨 **Full-screen TUI** — A smooth, retro terminal interface with a giant ASCII banner, arrow-key navigation, a filterable file browser and an in-place progress view (no scrolling)
 
 ## 🚀 Quick Start
 
@@ -48,15 +49,23 @@ python opus-dei.py
 ## 📋 Usage
 
 Run the script and move through the full-screen interface with the keyboard
-(`↑↓` to move, `⏎` to select, `←` to go back, `q` to quit). In the folder
-step you can either browse with the arrow keys or press `Tab` to type/paste a
-path directly:
+(`↑↓` to move, `⏎` to select, `←` to go back, `q` to quit). In the browser you
+can navigate with the arrow keys, press `Tab` to type/paste a path directly,
+and (when picking a file) press `/` to filter the list by text:
 
 ```bash
 python opus-dei.py
 ```
 
-The program will guide you through three main steps:
+On the first screen you choose what to do:
+
+- **Convert spectra** — batch-convert a folder of OPUS files to `.dpt` / `.mzz`
+  (the three steps below).
+- **Inspect metadata** — pick a single OPUS file and read all of its metadata
+  on screen, grouped by block with readable descriptions of the common
+  parameter codes; press `s` to save it to a `.txt` next to the file.
+
+### Convert spectra
 
 ### 1. Directory Selection 📁
 
