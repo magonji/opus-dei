@@ -24,8 +24,11 @@ import time
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Layout
-from prompt_toolkit.layout.containers import HSplit, Window, ConditionalContainer
+from prompt_toolkit.layout.containers import (
+    HSplit, Window, ConditionalContainer, WindowAlign,
+)
 from prompt_toolkit.layout.controls import FormattedTextControl
+from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.styles import Style as PTStyle
 from prompt_toolkit.widgets import TextArea
 from prompt_toolkit.filters import has_focus, Condition
@@ -44,18 +47,6 @@ TITLE_ART = r"""
 ██║   ██║██╔═══╝ ██║   ██║╚════██║    ██║  ██║██╔══╝  ██║
 ╚██████╔╝██║     ╚██████╔╝███████║    ██████╔╝███████╗██║
  ╚═════╝ ╚═╝      ╚═════╝ ╚══════╝    ╚═════╝ ╚══════╝╚═╝
-""".strip("\n").splitlines()
-
-# Little mascot kept from previous versions — the OPUS dei signature.
-MASCOT_ART = r"""
-                     ___
-               __   /   \  _____
-              /(o)\/     \/    /\
-              \___/\     /\___/  \
-             /     /\___/     \ / \
-            /     / / /\ \     \ / \
-           /     / / /  \ \     \  /
-          /     ^ ^ ^    ^ ^     \/
 """.strip("\n").splitlines()
 
 
@@ -649,10 +640,13 @@ class OpusDeiApp:
 
     def _build_entries(self):
         """List selectable items for the folder browser at the current path."""
-        entries = [("select", f"✓  Use this folder", self.current_dir)]
+        entries = [
+            ("select", "Use this folder", self.current_dir),
+            ("type", "Type or paste a folder path…", None),
+        ]
         parent = self.current_dir.parent
         if parent != self.current_dir:
-            entries.append(("parent", "..  (parent folder)", parent))
+            entries.append(("parent", ".. (parent folder)", parent))
         try:
             subdirs = sorted(
                 (p for p in self.current_dir.iterdir() if p.is_dir()),
@@ -668,7 +662,8 @@ class OpusDeiApp:
     # -- Rendering ---------------------------------------------------------
 
     def render_title(self):
-        frags = title_fragments()
+        # No left padding: the window centres the banner horizontally.
+        frags = title_fragments(pad="")
         # Drop the final newline so the art fits an exact-height window.
         style, text = frags[-1]
         frags[-1] = (style, text.rstrip("\n"))
@@ -676,9 +671,9 @@ class OpusDeiApp:
 
     def render_subtitle(self):
         return [
-            (f"fg:{GOLD}", "   Bruker OPUS spectral converter"),
+            (f"fg:{GOLD}", "Bruker OPUS spectral converter"),
             (f"fg:{DIM}", "   ·   "),
-            (f"fg:{GOLD}", "v3.0"),
+            (f"fg:{GOLD}", "v3.1"),
             (f"fg:{DIM}", "   ·   Mario González-Jiménez · University of Glasgow"),
         ]
 
@@ -686,29 +681,27 @@ class OpusDeiApp:
         return getattr(self, f"_body_{self.step}")()
 
     def _body_welcome(self):
-        out = [("", "\n")]
-        rows = [
-            ("What it does", ".dpt / .mzz from Bruker OPUS files"),
-            ("Recursive", "finds files in every subfolder"),
-            ("Batch", "handles dozens to tens of thousands"),
-        ]
-        inner = 52
-        out.append((f"fg:{ACCENT}", "   ╭" + "─" * inner + "╮\n"))
-        for label, value in rows:
-            line = f" {label}   {value}"
-            pad = " " * max(inner - len(line), 0)
-            out.append((f"fg:{ACCENT}", "   │"))
-            out.append((f"fg:{DIM}", f" {label}   "))
-            out.append(("", value))
-            out.append(("", pad))
-            out.append((f"fg:{ACCENT}", "│\n"))
-        out.append((f"fg:{ACCENT}", "   ╰" + "─" * inner + "╯\n"))
-        out.append(("", "\n"))
-        for line in MASCOT_ART:
-            out.append((f"fg:{DIM}", "     " + line + "\n"))
-        out.append(("", "\n"))
-        out.append((f"fg:{GOLD} bold", "   Press ⏎ to begin.\n"))
-        return out
+        # The welcome splash is drawn by dedicated centred windows (banner,
+        # subtitle, hint) so the whole thing can be centred; the body is empty.
+        return []
+
+    def render_welcome_hint(self):
+        return [(f"fg:{GOLD} bold", "Press ⏎ to begin")]
+
+    def _welcome_top_height(self):
+        """Exact top padding that centres the welcome splash (0 elsewhere).
+
+        The greedy bottom filler takes the matching space below, so the splash
+        block lands dead centre and the status bar stays on the bottom edge.
+        """
+        if self.step != "welcome":
+            return Dimension.exact(0)
+        try:
+            rows = self.app.output.get_size().rows
+        except Exception:
+            return Dimension.exact(0)
+        block = len(TITLE_ART) + 1 + 1 + 1  # banner + subtitle + gap + hint
+        return Dimension.exact(max((rows - block - 1) // 2, 0))  # -1 status bar
 
     def _is_typing_path(self):
         """True while the direct path-entry field holds keyboard focus."""
@@ -716,6 +709,12 @@ class OpusDeiApp:
             return self.app.layout.has_focus(self.path_field)
         except Exception:
             return False
+
+    def _focus_path_input(self):
+        """Move focus to the path field for direct entry (empty, ready to type)."""
+        self.path_error = None
+        self.path_field.text = ""  # start empty so a pasted path just works
+        self.app.layout.focus(self.path_field)
 
     def _accept_path(self, buffer):
         """Handle a path typed into the direct-entry field (Enter pressed)."""
@@ -742,8 +741,23 @@ class OpusDeiApp:
 
     def _body_folder(self):
         out = [("", "\n")]
-        out.append((f"fg:{GOLD} bold", "   Select the folder containing your OPUS files\n\n"))
-        out.append((f"fg:{DIM}", "   " + str(self.current_dir) + "\n"))
+        out.append((f"fg:{GOLD} bold", "   Choose the folder that contains your OPUS files\n"))
+        if self._is_typing_path():
+            out.append((f"fg:{DIM}", "   Type or paste the full path below, then press "))
+            out.append((f"fg:{GOLD}", "⏎"))
+            out.append((f"fg:{DIM}", "  (Esc to cancel)\n"))
+            example = str(Path.home() / "Documents" / "OPUS data")
+            out.append((f"fg:{DIM}", f"   e.g.  {example}\n\n"))
+        else:
+            out.append((f"fg:{DIM}", "   Browse with "))
+            out.append((f"fg:{GOLD}", "↑↓"))
+            out.append((f"fg:{DIM}", " and "))
+            out.append((f"fg:{GOLD}", "⏎"))
+            out.append((f"fg:{DIM}", ", or choose "))
+            out.append((f"fg:{GOLD}", "“Type or paste a folder path”"))
+            out.append((f"fg:{DIM}", ".\n\n"))
+        out.append((f"fg:{DIM}", "   Currently in:  "))
+        out.append(("", str(self.current_dir) + "\n"))
         if self.path_error:
             out.append((f"fg:{ACCENT}", "   ✗ " + self.path_error + "\n"))
         out.append(("", "\n"))
@@ -759,15 +773,13 @@ class OpusDeiApp:
             out.append((f"fg:{DIM}", "     ↑ …\n"))
         for i, (kind, label, _path) in enumerate(visible, start=start):
             selected = i == self.entry_index
-            icon = {"select": "✓ ", "parent": "↩ ", "dir": "📁 "}[kind]
-            if kind == "select":
-                icon = "✓ "
+            icon = {"select": "✓ ", "type": "⌨  ", "parent": "↩ ", "dir": "📁 "}[kind]
             text = f"{icon}{label}"
             if selected:
                 out.append((f"fg:#ffffff bg:{ACCENT} bold", f"   › {text}"))
                 out.append((f"fg:#ffffff bg:{ACCENT}", " " * max(52 - len(text), 1) + "\n"))
             else:
-                colour = GOLD if kind == "select" else ""
+                colour = GOLD if kind in ("select", "type") else ""
                 out.append((f"fg:{colour}" if colour else "", f"     {text}\n"))
         if start + max_visible < total:
             out.append((f"fg:{DIM}", "     ↓ …\n"))
@@ -898,6 +910,8 @@ class OpusDeiApp:
                 self.selected_folder = str(self.current_dir)
                 self.format_index = 0
                 self.step = "format"
+            elif kind == "type":
+                self._focus_path_input()
             else:  # 'parent' or 'dir'
                 self.current_dir = path
                 self._build_entries()
@@ -970,7 +984,7 @@ class OpusDeiApp:
         # Direct path-entry field, shown only during the folder step.
         self.path_field = TextArea(
             multiline=False,
-            prompt=[("class:pathprompt", "   path › ")],
+            prompt=[("class:pathprompt", "   Folder path › ")],
             accept_handler=self._accept_path,
             style="class:pathinput",
             height=1,
@@ -1016,9 +1030,7 @@ class OpusDeiApp:
         @kb.add("tab", filter=folder_browsing)
         @kb.add("/", filter=folder_browsing)
         def _(event):
-            self.path_error = None
-            self.path_field.text = ""  # start empty so a pasted path just works
-            event.app.layout.focus(self.path_field)
+            self._focus_path_input()
 
         # Leave path-entry mode without navigating.
         @kb.add("escape", filter=typing)
@@ -1026,18 +1038,36 @@ class OpusDeiApp:
             self.path_error = None
             event.app.layout.focus(self.body_window)
 
-        self.body_window = Window(FormattedTextControl(self.render_body, focusable=True))
+        self.body_window = Window(
+            FormattedTextControl(self.render_body, focusable=True),
+            dont_extend_height=True,
+        )
 
+        on_welcome = Condition(lambda: self.step == "welcome")
+
+        # Empty Window() fillers grow to absorb spare vertical space. The top
+        # filler exists only on the welcome step (centring the splash); the
+        # bottom filler is always present (pinning the status bar to the bottom
+        # edge). Everything is a flat child of the root HSplit — a nested HSplit
+        # would swallow the spare space instead of letting the fillers grow.
         root = HSplit([
+            Window(height=self._welcome_top_height),  # exact top pad (welcome)
+            Window(FormattedTextControl(self.render_title), height=len(TITLE_ART),
+                   align=WindowAlign.CENTER),
+            Window(FormattedTextControl(self.render_subtitle), height=1,
+                   align=WindowAlign.CENTER),
             Window(height=1),
-            Window(FormattedTextControl(self.render_title), height=len(TITLE_ART)),
-            Window(FormattedTextControl(self.render_subtitle), height=1),
-            Window(height=1),
+            ConditionalContainer(
+                Window(FormattedTextControl(self.render_welcome_hint),
+                       height=1, align=WindowAlign.CENTER),
+                filter=on_welcome,
+            ),
             self.body_window,
             ConditionalContainer(
                 self.path_field,
                 filter=Condition(lambda: self.step == "folder"),
             ),
+            Window(),  # bottom filler
             Window(FormattedTextControl(self.render_status), height=1, style="class:status"),
         ])
 
@@ -1048,7 +1078,7 @@ class OpusDeiApp:
         })
 
         return Application(
-            layout=Layout(root, focused_element=self.body_window),
+            layout=Layout(root),
             key_bindings=kb,
             style=style,
             full_screen=True,
