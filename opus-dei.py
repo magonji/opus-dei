@@ -6,7 +6,7 @@ This script converts Bruker OPUS spectral files to two formats:
 1. .dpt files: Tab-delimited text files with wavenumber and absorption data
 2. .mzz files: Compressed format with rounded wavenumbers for space efficiency
 
-Author: Converted from Jupyter notebook
+Author: Converted from a Jupyter notebook
 Usage: python opus_converter.py
 """
 
