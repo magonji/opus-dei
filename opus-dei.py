@@ -13,14 +13,80 @@ Usage: python opus_converter.py
 import numpy as np
 import struct
 import os
+import io
 import zipfile
-import questionary
+import threading
+import contextlib
 from pathlib import Path
 from colorama import init, Fore, Back, Style
 import time
 
+from prompt_toolkit.application import Application
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import Layout
+from prompt_toolkit.layout.containers import HSplit, Window, ConditionalContainer
+from prompt_toolkit.layout.controls import FormattedTextControl
+from prompt_toolkit.styles import Style as PTStyle
+from prompt_toolkit.widgets import TextArea
+from prompt_toolkit.filters import has_focus, Condition
+
 # Initialise colorama for cross-platform colour support
 init(autoreset=True)
+
+
+# --- Splash screen -------------------------------------------------------
+
+# Giant "OPUS DEI" title (figlet 'ansi_shadow' font).
+TITLE_ART = r"""
+ ██████╗ ██████╗ ██╗   ██╗███████╗    ██████╗ ███████╗██╗
+██╔═══██╗██╔══██╗██║   ██║██╔════╝    ██╔══██╗██╔════╝██║
+██║   ██║██████╔╝██║   ██║███████╗    ██║  ██║█████╗  ██║
+██║   ██║██╔═══╝ ██║   ██║╚════██║    ██║  ██║██╔══╝  ██║
+╚██████╔╝██║     ╚██████╔╝███████║    ██████╔╝███████╗██║
+ ╚═════╝ ╚═╝      ╚═════╝ ╚══════╝    ╚═════╝ ╚══════╝╚═╝
+""".strip("\n").splitlines()
+
+# Little mascot kept from previous versions — the OPUS dei signature.
+MASCOT_ART = r"""
+                     ___
+               __   /   \  _____
+              /(o)\/     \/    /\
+              \___/\     /\___/  \
+             /     /\___/     \ / \
+            /     / / /\ \     \ / \
+           /     / / /  \ \     \  /
+          /     ^ ^ ^    ^ ^     \/
+""".strip("\n").splitlines()
+
+
+# Colour palette (pink -> gold gradient endpoints, plus accents).
+GRAD_START = (255, 58, 107)
+GRAD_END = (255, 170, 64)
+ACCENT = "#ff3a6b"
+GOLD = "#ffaa40"
+DIM = "#8a8a96"
+
+
+def _hex(rgb):
+    """Convert an (r, g, b) tuple to a #rrggbb string."""
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def title_fragments(pad="   "):
+    """Return the giant OPUS DEI title as prompt_toolkit (style, text) fragments.
+
+    Each line gets its own colour along a vertical pink -> gold gradient.
+    prompt_toolkit downgrades the colours automatically on terminals with a
+    limited palette, so no manual fallback is needed.
+    """
+    fragments = []
+    n = max(len(TITLE_ART) - 1, 1)
+    for i, line in enumerate(TITLE_ART):
+        r = round(GRAD_START[0] + (GRAD_END[0] - GRAD_START[0]) * i / n)
+        g = round(GRAD_START[1] + (GRAD_END[1] - GRAD_START[1]) * i / n)
+        b = round(GRAD_START[2] + (GRAD_END[2] - GRAD_START[2]) * i / n)
+        fragments.append((f"fg:{_hex((r, g, b))} bold", pad + line + "\n"))
+    return fragments
 
 
 class OpusFileReader(dict):
@@ -514,239 +580,489 @@ def convert_opus_file(opus_filepath, output_formats, show_individual_files=False
         return False
 
 
-def welcome_message():
-    """
-    Prints the welcome message for OPUS File Converter.
-    """
-    print(f"\n\n{Fore.YELLOW}**********************************************************************{Style.RESET_ALL}")
-    print(f"{Fore.YELLOW}* Welcome to OPUS Converter — a Bruker OPUS file processing tool.   *{Style.RESET_ALL}")
-    print(f"{Fore.YELLOW}**********************************************************************{Style.RESET_ALL}")
-    
-    banner = rf"""
-
-                            ___
-                      __   /   \  _____
-                     /(o)\/     \/    /\
-                     \___/\     /\___/  \           {Fore.LIGHTRED_EX}  OPUS dei v3.0{Style.RESET_ALL}
-                    /     /\___/     \ / \          {Fore.LIGHTRED_EX}  Mario González-Jiménez{Style.RESET_ALL}
-                   /     / / /\ \     \ / \         {Fore.LIGHTRED_EX}  22 Sept 2025 - University of Glasgow{Style.RESET_ALL}
-                  /     / / /  \ \     \  /
-                 /     ^ ^ ^    ^ ^     \/
-            """
-    print(banner)
-    
-    # Wait 3 seconds before showing the rest
-    time.sleep(3)
-    
-    print(f"\n\n{Fore.YELLOW}The conversion process follows these steps:{Style.RESET_ALL}\n")
-    
-    print(f"  {Fore.GREEN}1. Directory Selection{Style.RESET_ALL}")
-    print(f"     Browse and select the folder containing your OPUS files.")
-    print(f"     The program will recursively search through all subdirectories")
-    print(f"     to find files with numerical endings (e.g., spectrum.0, data.1).")
-    print(f"     {Fore.CYAN}Interactive folder browser with full path support.{Style.RESET_ALL}\n")
-    
-    print(f"  {Fore.GREEN}2. Output Format Selection{Style.RESET_ALL}")
-    print(f"     Choose your preferred output formats:")
-    print(f"     • {Fore.BLUE}.dpt files{Style.RESET_ALL} - Full resolution tab-delimited text files")
-    print(f"       Perfect for direct import into analysis software")
-    print(f"     • {Fore.YELLOW}.mzz files{Style.RESET_ALL} - Compressed format with 1 cm⁻¹ resolution")
-    print(f"       Space-efficient ZIP archives for long-term storage")
-    print(f"     {Fore.CYAN}Mix and match formats based on your workflow needs.{Style.RESET_ALL}\n")
-    
-    print(f"  {Fore.GREEN}3. Batch Processing{Style.RESET_ALL}")
-    print(f"     Intelligent processing with adaptive progress display:")
-    print(f"     • Small batches (≤100 files): Individual file tracking")
-    print(f"     • Large batches (>100 files): Progress bar with ETA")
-    print(f"     • Error handling and detailed conversion statistics")
-    print(f"     {Fore.CYAN}Optimised for datasets from dozens to tens of thousands of files.{Style.RESET_ALL}\n")
-    
-    print(f"\n{Fore.YELLOW}Ready to convert your OPUS files? Let's get started!{Style.RESET_ALL}")
-    
-    # Small pause before continuing
-    time.sleep(2)
+def _fmt_duration(seconds):
+    """Format a duration in seconds as a compact human string."""
+    if seconds is None:
+        return "—"
+    if seconds >= 60:
+        return f"{int(seconds // 60)}m {int(seconds % 60)}s"
+    if seconds >= 1:
+        return f"{seconds:.1f}s"
+    return f"{seconds * 1000:.0f}ms"
 
 
-def print_header():
-    """
-    Print a colourful header for the application.
-    """
-    print(f"\n{Fore.MAGENTA}{'='*60}{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}{Style.BRIGHT}🔄 FILE CONVERSION INTERFACE{Style.RESET_ALL}")
-    print(f"{Fore.MAGENTA}{'='*60}{Style.RESET_ALL}\n")
+# Output format options presented in the format-selection step.
+FORMAT_OPTIONS = [
+    ("Both .dpt and .mzz", "full resolution + compressed archive", ["dpt", "mzz"]),
+    ("Only .dpt", "full resolution tab-delimited text", ["dpt"]),
+    ("Only .mzz", "compressed 1 cm⁻¹ ZIP archive", ["mzz"]),
+]
+
+SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
-def print_progress_bar(current, total, width=50, start_time=None):
+class OpusDeiApp:
+    """A full-screen, navigable TUI for the OPUS dei converter.
+
+    The interface is a fixed screen (banner on top, a body that changes with
+    the current step, and a status bar with shortcuts at the bottom). Nothing
+    scrolls — the whole screen repaints in place, giving a smooth, modern feel.
+    The spectral parsing/conversion engine is untouched and runs in a
+    background thread so the UI stays responsive.
     """
-    Print a progress bar with percentage, visual bar, and estimated time remaining.
-    
-    Args:
-        current (int): Current progress count
-        total (int): Total items to process
-        width (int): Width of the progress bar in characters
-        start_time (float): Time when processing started (for ETA calculation)
-    """
-    if total == 0:
-        return
-        
-    percentage = (current / total) * 100
-    filled_width = int(width * current // total)
-    
-    # Create the visual bar
-    bar = f"{'█' * filled_width}{'░' * (width - filled_width)}"
-    
-    # Calculate ETA if start_time is provided
-    eta_text = ""
-    if start_time and current > 0:
-        elapsed = time.time() - start_time
-        if current < total:
-            estimated_total = elapsed * total / current
-            eta_seconds = estimated_total - elapsed
-            if eta_seconds > 60:
-                eta_text = f" | ETA: {int(eta_seconds // 60)}m {int(eta_seconds % 60)}s"
-            else:
-                eta_text = f" | ETA: {int(eta_seconds)}s"
+
+    def __init__(self):
+        self.step = "welcome"          # welcome | folder | format | confirm | progress | summary
+
+        # Folder browser state.
+        self.current_dir = Path.cwd()
+        self.entries = []
+        self.entry_index = 0
+
+        # Format selection state.
+        self.format_index = 0
+
+        # Selections.
+        self.selected_folder = None
+        self.selected_formats = None
+
+        # Direct path-entry state (folder step).
+        self.path_error = None
+
+        # Scanning / conversion state (shared with worker threads).
+        self.opus_files = []
+        self.scanning = False
+        self.converting = False
+        self.done_count = 0
+        self.success = 0
+        self.failed = 0
+        self.start_time = None
+        self.total_time = None
+
+        self.app = self._build_application()
+
+    # -- Terminal / helpers ------------------------------------------------
+
+    @property
+    def _spinner(self):
+        return SPINNER[int(time.time() * 10) % len(SPINNER)]
+
+    def _build_entries(self):
+        """List selectable items for the folder browser at the current path."""
+        entries = [("select", f"✓  Use this folder", self.current_dir)]
+        parent = self.current_dir.parent
+        if parent != self.current_dir:
+            entries.append(("parent", "..  (parent folder)", parent))
+        try:
+            subdirs = sorted(
+                (p for p in self.current_dir.iterdir() if p.is_dir()),
+                key=lambda p: p.name.lower(),
+            )
+        except (PermissionError, OSError):
+            subdirs = []
+        for p in subdirs:
+            entries.append(("dir", p.name + "/", p))
+        self.entries = entries
+        self.entry_index = 0
+
+    # -- Rendering ---------------------------------------------------------
+
+    def render_title(self):
+        frags = title_fragments()
+        # Drop the final newline so the art fits an exact-height window.
+        style, text = frags[-1]
+        frags[-1] = (style, text.rstrip("\n"))
+        return frags
+
+    def render_subtitle(self):
+        return [
+            (f"fg:{GOLD}", "   Bruker OPUS spectral converter"),
+            (f"fg:{DIM}", "   ·   "),
+            (f"fg:{GOLD}", "v3.0"),
+            (f"fg:{DIM}", "   ·   Mario González-Jiménez · University of Glasgow"),
+        ]
+
+    def render_body(self):
+        return getattr(self, f"_body_{self.step}")()
+
+    def _body_welcome(self):
+        out = [("", "\n")]
+        rows = [
+            ("What it does", ".dpt / .mzz from Bruker OPUS files"),
+            ("Recursive", "finds files in every subfolder"),
+            ("Batch", "handles dozens to tens of thousands"),
+        ]
+        inner = 52
+        out.append((f"fg:{ACCENT}", "   ╭" + "─" * inner + "╮\n"))
+        for label, value in rows:
+            line = f" {label}   {value}"
+            pad = " " * max(inner - len(line), 0)
+            out.append((f"fg:{ACCENT}", "   │"))
+            out.append((f"fg:{DIM}", f" {label}   "))
+            out.append(("", value))
+            out.append(("", pad))
+            out.append((f"fg:{ACCENT}", "│\n"))
+        out.append((f"fg:{ACCENT}", "   ╰" + "─" * inner + "╯\n"))
+        out.append(("", "\n"))
+        for line in MASCOT_ART:
+            out.append((f"fg:{DIM}", "     " + line + "\n"))
+        out.append(("", "\n"))
+        out.append((f"fg:{GOLD} bold", "   Press ⏎ to begin.\n"))
+        return out
+
+    def _is_typing_path(self):
+        """True while the direct path-entry field holds keyboard focus."""
+        try:
+            return self.app.layout.has_focus(self.path_field)
+        except Exception:
+            return False
+
+    def _accept_path(self, buffer):
+        """Handle a path typed into the direct-entry field (Enter pressed)."""
+        raw = buffer.text.strip()
+        if not raw:
+            return False
+        candidate = Path(raw).expanduser()
+        try:
+            resolved = candidate.resolve()
+        except (OSError, RuntimeError):
+            resolved = candidate
+        if resolved.is_dir():
+            target = resolved
+        elif resolved.is_file():
+            target = resolved.parent  # accept a file path, use its folder
         else:
-            eta_text = f" | Completed in: {int(elapsed)}s"
-    
-    # Print the progress bar (using \r to overwrite the same line)
-    print(f"\r{Fore.CYAN}Progress:{Style.RESET_ALL} [{bar}] {percentage:6.2f}% ({current:,}/{total:,}){eta_text}", end='', flush=True)
+            self.path_error = f"Not a folder: {raw}"
+            return True  # keep the text so the user can fix it
+        self.current_dir = target
+        self._build_entries()
+        self.path_error = None
+        self.app.layout.focus(self.body_window)  # back to the browser
+        return False
 
+    def _body_folder(self):
+        out = [("", "\n")]
+        out.append((f"fg:{GOLD} bold", "   Select the folder containing your OPUS files\n\n"))
+        out.append((f"fg:{DIM}", "   " + str(self.current_dir) + "\n"))
+        if self.path_error:
+            out.append((f"fg:{ACCENT}", "   ✗ " + self.path_error + "\n"))
+        out.append(("", "\n"))
 
-def print_summary(successful, failed, formats, total_time=None):
-    """
-    Print a colourful summary of the conversion results.
-    
-    Args:
-        successful (int): Number of successful conversions
-        failed (int): Number of failed conversions
-        formats (list): List of output formats used
-        total_time (float): Total time taken for processing
-    """
-    print(f"\n\n{Fore.MAGENTA}{'='*60}{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}{Style.BRIGHT}📊 CONVERSION SUMMARY{Style.RESET_ALL}")
-    print(f"{Fore.MAGENTA}{'='*60}{Style.RESET_ALL}")
-    
-    format_names = " and ".join([f".{fmt}" for fmt in formats])
-    print(f"{Fore.WHITE}Output format(s):{Style.RESET_ALL} {format_names}")
-    
-    if total_time:
-        if total_time > 60:
-            time_text = f"{int(total_time // 60)}m {int(total_time % 60)}s"
-        else:
-            time_text = f"{total_time:.1f}s"
-        print(f"{Fore.WHITE}Total processing time:{Style.RESET_ALL} {time_text}")
-        
-        if successful > 0:
-            avg_time = total_time / successful
-            if avg_time < 1:
-                avg_text = f"{avg_time*1000:.0f}ms"
+        # Simple viewport so long directory listings never overflow.
+        max_visible = 12
+        total = len(self.entries)
+        start = max(0, min(self.entry_index - max_visible // 2, total - max_visible))
+        start = max(start, 0)
+        visible = self.entries[start:start + max_visible]
+
+        if start > 0:
+            out.append((f"fg:{DIM}", "     ↑ …\n"))
+        for i, (kind, label, _path) in enumerate(visible, start=start):
+            selected = i == self.entry_index
+            icon = {"select": "✓ ", "parent": "↩ ", "dir": "📁 "}[kind]
+            if kind == "select":
+                icon = "✓ "
+            text = f"{icon}{label}"
+            if selected:
+                out.append((f"fg:#ffffff bg:{ACCENT} bold", f"   › {text}"))
+                out.append((f"fg:#ffffff bg:{ACCENT}", " " * max(52 - len(text), 1) + "\n"))
             else:
-                avg_text = f"{avg_time:.2f}s"
-            print(f"{Fore.WHITE}Average time per file:{Style.RESET_ALL} {avg_text}")
-    
-    if successful > 0:
-        print(f"{Fore.GREEN}✅ Successfully converted:{Style.RESET_ALL} {Style.BRIGHT}{successful:,}{Style.RESET_ALL} files")
-    
-    if failed > 0:
-        print(f"{Fore.RED}❌ Failed conversions:{Style.RESET_ALL} {Style.BRIGHT}{failed:,}{Style.RESET_ALL} files")
-        success_rate = (successful / (successful + failed)) * 100
-        print(f"{Fore.YELLOW}📈 Success rate:{Style.RESET_ALL} {success_rate:.1f}%")
-    else:
-        print(f"{Fore.GREEN}🎉 All files converted successfully!{Style.RESET_ALL}")
-    
-    print(f"{Fore.MAGENTA}{'='*60}{Style.RESET_ALL}\n")
+                colour = GOLD if kind == "select" else ""
+                out.append((f"fg:{colour}" if colour else "", f"     {text}\n"))
+        if start + max_visible < total:
+            out.append((f"fg:{DIM}", "     ↓ …\n"))
+        return out
+
+    def _body_format(self):
+        out = [("", "\n")]
+        out.append((f"fg:{GOLD} bold", "   Which output formats would you like to generate?\n\n"))
+        for i, (name, desc, _value) in enumerate(FORMAT_OPTIONS):
+            selected = i == self.format_index
+            if selected:
+                out.append((f"fg:#ffffff bg:{ACCENT} bold", f"   › {name}"))
+                out.append((f"fg:#ffffff bg:{ACCENT}", " " * max(28 - len(name), 1)))
+                out.append((f"fg:#ffffff bg:{ACCENT}", f"{desc}"))
+                out.append((f"fg:#ffffff bg:{ACCENT}", " " * 2 + "\n"))
+            else:
+                out.append(("", f"     {name}"))
+                out.append(("", " " * max(28 - len(name), 1)))
+                out.append((f"fg:{DIM}", f"{desc}\n"))
+        return out
+
+    def _body_confirm(self):
+        out = [("", "\n")]
+        formats = " and ".join(f".{f}" for f in self.selected_formats)
+        out.append((f"fg:{DIM}", "   Folder    "))
+        out.append(("", str(self.selected_folder) + "\n"))
+        out.append((f"fg:{DIM}", "   Formats   "))
+        out.append(("", formats + "\n\n"))
+
+        if self.scanning:
+            out.append((f"fg:{ACCENT} bold", f"   {self._spinner} "))
+            out.append(("", "Scanning for OPUS files…\n"))
+        elif not self.opus_files:
+            out.append((f"fg:{ACCENT} bold", "   ✗  No OPUS files found in this folder.\n"))
+            out.append((f"fg:{DIM}", "      Press ← to choose a different folder.\n"))
+        else:
+            out.append((f"fg:{GOLD} bold", f"   ✓  Found {len(self.opus_files):,} OPUS file(s).\n\n"))
+            out.append((f"fg:{GOLD} bold", "   Press ⏎ to start converting.\n"))
+        return out
+
+    def _body_progress(self):
+        out = [("", "\n")]
+        total = len(self.opus_files)
+        cur = self.done_count
+        pct = (cur / total * 100) if total else 0
+        width = 42
+        filled = int(width * cur / total) if total else 0
+        bar_done = "█" * filled
+        bar_rest = "░" * (width - filled)
+
+        eta = None
+        if self.start_time and cur > 0 and cur < total:
+            elapsed = time.time() - self.start_time
+            eta = elapsed * total / cur - elapsed
+
+        out.append((f"fg:{GOLD} bold", f"   {self._spinner} Converting…\n\n"))
+        out.append(("   ", "   "))
+        out.append((f"fg:{ACCENT}", bar_done))
+        out.append((f"fg:{DIM}", bar_rest))
+        out.append(("", f"  {pct:5.1f}%\n\n"))
+        out.append((f"fg:{DIM}", "   files     "))
+        out.append(("", f"{cur:,} / {total:,}\n"))
+        out.append((f"fg:{DIM}", "   ETA       "))
+        out.append(("", f"{_fmt_duration(eta)}\n"))
+        if self.failed:
+            out.append((f"fg:{ACCENT}", f"   failed    {self.failed:,}\n"))
+        return out
+
+    def _body_summary(self):
+        out = [("", "\n")]
+        total = self.success + self.failed
+        formats = " and ".join(f".{f}" for f in self.selected_formats)
+        out.append((f"fg:{GOLD} bold", "   Conversion summary\n\n"))
+        out.append((f"fg:{DIM}", "   formats   "))
+        out.append(("", formats + "\n"))
+        out.append((f"fg:{DIM}", "   time      "))
+        out.append(("", _fmt_duration(self.total_time) + "\n"))
+        if self.success:
+            avg = self.total_time / self.success if self.total_time else None
+            out.append((f"fg:{DIM}", "   avg/file  "))
+            out.append(("", _fmt_duration(avg) + "\n"))
+        out.append(("", "\n"))
+        out.append((f"fg:{GOLD} bold", f"   ✓  Converted   {self.success:,}\n"))
+        if self.failed:
+            rate = self.success / total * 100 if total else 0
+            out.append((f"fg:{ACCENT} bold", f"   ✗  Failed      {self.failed:,}"))
+            out.append((f"fg:{DIM}", f"   ({rate:.1f}% success)\n"))
+        else:
+            out.append((f"fg:{GOLD}", "   🎉  All files converted successfully!\n"))
+        out.append(("", "\n"))
+        out.append((f"fg:{DIM}", "   Press ⏎ or q to exit.\n"))
+        return out
+
+    def render_status(self):
+        if self.step == "folder" and self._is_typing_path():
+            hint = "type or paste a path   ⏎ go   esc cancel"
+        else:
+            hints = {
+                "welcome": "⏎ begin      q quit",
+                "folder": "↑↓ move   ⏎ open / select   ⇥ type path   ← back   q quit",
+                "format": "↑↓ move   ⏎ choose   ← back   q quit",
+                "confirm": "⏎ convert   ← back   q quit",
+                "progress": "converting…  please wait",
+                "summary": "⏎ / q  exit",
+            }
+            hint = hints.get(self.step, "")
+        return [("", "  OPUS dei  ·  "), ("bold", hint)]
+
+    # -- Navigation --------------------------------------------------------
+
+    def _move(self, delta):
+        if self.step == "folder" and self.entries:
+            self.entry_index = (self.entry_index + delta) % len(self.entries)
+        elif self.step == "format":
+            self.format_index = (self.format_index + delta) % len(FORMAT_OPTIONS)
+
+    def _activate(self):
+        if self.step == "welcome":
+            self.current_dir = Path.cwd()
+            self._build_entries()
+            self.step = "folder"
+
+        elif self.step == "folder":
+            if not self.entries:
+                return
+            kind, _label, path = self.entries[self.entry_index]
+            if kind == "select":
+                self.selected_folder = str(self.current_dir)
+                self.format_index = 0
+                self.step = "format"
+            else:  # 'parent' or 'dir'
+                self.current_dir = path
+                self._build_entries()
+
+        elif self.step == "format":
+            self.selected_formats = FORMAT_OPTIONS[self.format_index][2]
+            self.step = "confirm"
+            self._start_scan()
+
+        elif self.step == "confirm":
+            if not self.scanning and self.opus_files:
+                self.step = "progress"
+                self._start_convert()
+
+        elif self.step == "summary":
+            self.app.exit()
+
+    def _back(self):
+        if self.step == "folder":
+            self.step = "welcome"
+        elif self.step == "format":
+            self.step = "folder"
+        elif self.step == "confirm":
+            if not self.scanning:
+                self.step = "format"
+
+    # -- Background workers -------------------------------------------------
+
+    def _start_scan(self):
+        self.scanning = True
+        self.opus_files = []
+        threading.Thread(target=self._scan_worker, daemon=True).start()
+
+    def _scan_worker(self):
+        try:
+            files = find_opus_files(self.selected_folder)
+        except Exception:
+            files = []
+        self.opus_files = files
+        self.scanning = False
+
+    def _start_convert(self):
+        self.converting = True
+        self.done_count = 0
+        self.success = 0
+        self.failed = 0
+        self.start_time = time.time()
+        threading.Thread(target=self._convert_worker, daemon=True).start()
+
+    def _convert_worker(self):
+        for i, opus_file in enumerate(self.opus_files):
+            # Silence any parser warnings so they can't corrupt the TUI screen.
+            with contextlib.redirect_stdout(io.StringIO()):
+                try:
+                    ok = convert_opus_file(opus_file, self.selected_formats)
+                except Exception:
+                    ok = False
+            if ok:
+                self.success += 1
+            else:
+                self.failed += 1
+            self.done_count = i + 1
+        self.total_time = time.time() - self.start_time
+        self.converting = False
+        self.step = "summary"
+
+    # -- Application wiring -------------------------------------------------
+
+    def _build_application(self):
+        # Direct path-entry field, shown only during the folder step.
+        self.path_field = TextArea(
+            multiline=False,
+            prompt=[("class:pathprompt", "   path › ")],
+            accept_handler=self._accept_path,
+            style="class:pathinput",
+            height=1,
+        )
+        typing = has_focus(self.path_field)
+        # Navigation keys are inactive while the path field is focused, so
+        # letters (q, j, k, /, …) type into the path instead of triggering nav.
+        nav = ~typing
+
+        kb = KeyBindings()
+
+        @kb.add("up", filter=nav)
+        @kb.add("k", filter=nav)
+        def _(event):
+            self._move(-1)
+
+        @kb.add("down", filter=nav)
+        @kb.add("j", filter=nav)
+        def _(event):
+            self._move(1)
+
+        @kb.add("enter", filter=nav)
+        @kb.add("right", filter=nav)
+        def _(event):
+            self._activate()
+
+        @kb.add("left", filter=nav)
+        @kb.add("backspace", filter=nav)
+        def _(event):
+            self._back()
+
+        @kb.add("q", filter=nav)
+        def _(event):
+            event.app.exit()
+
+        @kb.add("c-c")
+        def _(event):
+            event.app.exit()
+
+        # Enter direct path-entry mode (folder step only, when browsing).
+        folder_browsing = Condition(lambda: self.step == "folder") & nav
+
+        @kb.add("tab", filter=folder_browsing)
+        @kb.add("/", filter=folder_browsing)
+        def _(event):
+            self.path_error = None
+            self.path_field.text = ""  # start empty so a pasted path just works
+            event.app.layout.focus(self.path_field)
+
+        # Leave path-entry mode without navigating.
+        @kb.add("escape", filter=typing)
+        def _(event):
+            self.path_error = None
+            event.app.layout.focus(self.body_window)
+
+        self.body_window = Window(FormattedTextControl(self.render_body, focusable=True))
+
+        root = HSplit([
+            Window(height=1),
+            Window(FormattedTextControl(self.render_title), height=len(TITLE_ART)),
+            Window(FormattedTextControl(self.render_subtitle), height=1),
+            Window(height=1),
+            self.body_window,
+            ConditionalContainer(
+                self.path_field,
+                filter=Condition(lambda: self.step == "folder"),
+            ),
+            Window(FormattedTextControl(self.render_status), height=1, style="class:status"),
+        ])
+
+        style = PTStyle.from_dict({
+            "status": "reverse",
+            "pathprompt": f"fg:{GOLD} bold",
+            "pathinput": f"fg:#ffffff bg:#2a2a33",
+        })
+
+        return Application(
+            layout=Layout(root, focused_element=self.body_window),
+            key_bindings=kb,
+            style=style,
+            full_screen=True,
+            mouse_support=False,
+            refresh_interval=0.1,  # keeps the spinner and progress bar animating
+        )
+
+    def run(self):
+        self.app.run()
 
 
 def main():
-    """
-    Main function to run the OPUS file conversion process.
-    """
-    # Show welcome message first
-    welcome_message()
-    
-    print_header()
-    
-    # Get directory path from user
-    folder_path = questionary.path(
-        f"Please select the folder containing OPUS files:",
-        only_directories=True,
-        qmark="📂",
-        style=questionary.Style([
-            ('question', 'fg:#ff0066 bold'),
-            ('answer', 'fg:#44ff00 bold'),
-        ])
-    ).ask()
-    
-    if not folder_path:
-        print(f"{Fore.RED}❌ No folder selected. Exiting.{Style.RESET_ALL}")
-        return
-    
-    # Ask user which output formats they want
-    output_format_choice = questionary.select(
-        f"🎯 Which output formats would you like to generate?",
-        choices=[
-            {"name": f"Both .dpt and .mzz files", "value": ["dpt", "mzz"]},
-            {"name": f"Only .dpt files (full resolution)", "value": ["dpt"]},
-            {"name": f"Only .mzz files (compressed)", "value": ["mzz"]}
-        ],
-        style=questionary.Style([
-            ('question', 'fg:#ff0066 bold'),
-            ('answer', 'fg:#44ff00 bold'),
-            ('pointer', 'fg:#ff0066 bold'),
-            ('highlighted', 'fg:#ff0066 bold'),
-        ])
-    ).ask()
-    
-    if not output_format_choice:
-        print(f"{Fore.RED}❌ No format selected. Exiting.{Style.RESET_ALL}")
-        return
-    
-    # Find all OPUS files
-    print(f"{Fore.CYAN}🔍 Searching for OPUS files...{Style.RESET_ALL}")
-    opus_files = find_opus_files(folder_path)
-    
-    if not opus_files:
-        print(f"{Fore.RED}❌ No OPUS files found in {folder_path}{Style.RESET_ALL}")
-        return
-    
-    format_names = " and ".join([f".{fmt}" for fmt in output_format_choice])
-    print(f"{Fore.GREEN}✅ Found {Style.BRIGHT}{len(opus_files):,}{Style.RESET_ALL}{Fore.GREEN} OPUS file(s) to convert to {format_names} format(s).{Style.RESET_ALL}")
-    
-    # Determine if we should show individual file processing
-    show_individual = len(opus_files) <= 100
-    
-    if not show_individual:
-        print(f"{Fore.YELLOW}📋 Large batch detected - using progress bar mode{Style.RESET_ALL}")
-    
-    print(f"\n{Fore.MAGENTA}{'─'*60}{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}{Style.BRIGHT}🚀 STARTING CONVERSION{Style.RESET_ALL}")
-    print(f"{Fore.MAGENTA}{'─'*60}{Style.RESET_ALL}")
-    
-    # Convert each file
-    successful_conversions = 0
-    failed_conversions = 0
-    start_time = time.time()
-    
-    for i, opus_file in enumerate(opus_files):
-        if not show_individual:
-            # Show progress bar for large batches
-            print_progress_bar(i, len(opus_files), start_time=start_time)
-        else:
-            # Show individual file processing for small batches
-            print(f"{Fore.WHITE}[{i+1}/{len(opus_files)}]{Style.RESET_ALL}", end=" ")
-            
-        if convert_opus_file(opus_file, output_format_choice, show_individual_files=show_individual):
-            successful_conversions += 1
-        else:
-            failed_conversions += 1
-    
-    # Final progress bar update
-    if not show_individual:
-        print_progress_bar(len(opus_files), len(opus_files), start_time=start_time)
-    
-    total_time = time.time() - start_time
-    print_summary(successful_conversions, failed_conversions, output_format_choice, total_time)
+    """Run the OPUS dei converter as a full-screen TUI."""
+    OpusDeiApp().run()
 
 
 if __name__ == "__main__":

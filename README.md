@@ -17,7 +17,7 @@ OPUS Converter is designed to efficiently process Bruker OPUS binary files and c
 - 🎯 **Flexible Output Formats** — Choose exactly the formats you need
 - 📊 **Real-time Progress Tracking** — ETA calculations and processing statistics
 - 🛡️ **Error Resilience** — Continues processing even when individual files fail
-- 🎨 **Beautiful Terminal Interface** — Colourful, informative output using modern CLI design
+- 🎨 **Full-screen TUI** — A smooth, retro terminal interface with a giant ASCII banner, arrow-key navigation and an in-place progress view (no scrolling)
 
 ## 🚀 Quick Start
 
@@ -41,13 +41,16 @@ python opus-dei.py
 - Required packages:
   ```
   numpy
-  questionary
+  prompt_toolkit
   colorama
   ```
 
 ## 📋 Usage
 
-Simply run the script and follow the interactive prompts:
+Run the script and move through the full-screen interface with the keyboard
+(`↑↓` to move, `⏎` to select, `←` to go back, `q` to quit). In the folder
+step you can either browse with the arrow keys or press `Tab` to type/paste a
+path directly:
 
 ```bash
 python opus-dei.py
