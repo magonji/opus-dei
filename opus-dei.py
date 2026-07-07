@@ -14,6 +14,7 @@ import numpy as np
 import struct
 import os
 import io
+import re
 import zipfile
 import threading
 import contextlib
@@ -467,6 +468,22 @@ class DataBlock(dict):
         self.text_content = self.raw_chunk.decode('latin-1')
 
 
+def _clean_pasted_path(raw):
+    """Normalise a path pasted or dragged from Finder/terminal.
+
+    Handles the two common ways macOS mangles paths with spaces:
+    surrounding quotes ('…' or "…") and backslash-escaped characters
+    (e.g. ``Jacob\\ -\\ 4.0``). Without this a folder like
+    ``Jacob - 4.0`` would appear as "Not found".
+    """
+    text = raw.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        text = text[1:-1]
+    # Drop shell-style escaping of spaces and other characters.
+    text = re.sub(r'\\(.)', r'\1', text)
+    return text
+
+
 def find_opus_files(directory_path):
     """
     Find all OPUS files in the specified directory and subdirectories.
@@ -898,12 +915,20 @@ class OpusDeiApp:
         return frags
 
     def render_subtitle(self):
-        return [
+        frags = [
             (f"fg:{GOLD}", "Bruker OPUS spectral converter"),
             (f"fg:{DIM}", "   ·   "),
             (f"fg:{GOLD}", "v4.0"),
-            (f"fg:{DIM}", "   ·   Mario González-Jiménez · University of Glasgow"),
         ]
+        # On the welcome splash the author credit sits on its own line below;
+        # during use (top bar) it is dropped entirely.
+        if self.step == "welcome":
+            frags.append((f"fg:{DIM}", "\nMario González-Jiménez · University of Glasgow"))
+        return frags
+
+    def _subtitle_height(self):
+        # Two lines on the welcome splash (tagline + author), one elsewhere.
+        return 2 if self.step == "welcome" else 1
 
     def render_body(self):
         return getattr(self, f"_body_{self.step}")()
@@ -928,7 +953,7 @@ class OpusDeiApp:
             rows = self.app.output.get_size().rows
         except Exception:
             return Dimension.exact(0)
-        block = len(TITLE_ART) + 1 + 1 + 1  # banner + subtitle + gap + hint
+        block = len(TITLE_ART) + 2 + 1 + 1  # banner + subtitle(2 lines) + gap + hint
         return Dimension.exact(max((rows - block - 1) // 2, 0))  # -1 status bar
 
     def _is_typing_path(self):
@@ -956,7 +981,8 @@ class OpusDeiApp:
         raw = buffer.text.strip()
         if not raw:
             return False
-        candidate = Path(raw).expanduser()
+        cleaned = _clean_pasted_path(raw)
+        candidate = Path(cleaned).expanduser()
         try:
             resolved = candidate.resolve()
         except (OSError, RuntimeError):
@@ -1499,8 +1525,8 @@ class OpusDeiApp:
             Window(height=self._welcome_top_height),  # exact top pad (welcome)
             Window(FormattedTextControl(self.render_title), height=len(TITLE_ART),
                    align=WindowAlign.CENTER),
-            Window(FormattedTextControl(self.render_subtitle), height=1,
-                   align=WindowAlign.CENTER),
+            Window(FormattedTextControl(self.render_subtitle),
+                   height=self._subtitle_height, align=WindowAlign.CENTER),
             Window(height=1),
             ConditionalContainer(
                 Window(FormattedTextControl(self.render_welcome_hint),
